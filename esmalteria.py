@@ -9,16 +9,15 @@ import extra_streamlit_components as stx
 st.set_page_config(page_title="Esmalteria Borges", layout="centered")
 
 # ================= SISTEMA DE LOGIN COM COOKIE (7 DIAS) =================
+# Título principal (aparece antes do login para ficar bonito)
 st.title("💅 Esmalteria Borges")
 
-# Função para carregar o gerenciador de cookies
-@st.cache_resource
-def get_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_manager()
+# --- CORREÇÃO AQUI: Removemos o @st.cache_resource e a função get_manager ---
+# Chamamos o gerenciador diretamente para evitar o erro de CacheWidgetWarning
+cookie_manager = stx.CookieManager()
 
 # Tenta ler o cookie chamado 'acesso_esmalteria'
+# Adicionamos um pequeno atraso (key) para garantir que ele lê corretamente
 cookie_acesso = cookie_manager.get(cookie="acesso_esmalteria")
 
 # Verifica: Se NÃO tem cookie válido, pede senha
