@@ -11,12 +11,11 @@ st.title("💅 Esmalteria Borges - Financeiro")
 # O arquivo secrets.toml deve estar configurado corretamente
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- Funções de Carregamento e Salvamento ---
+# --- Funções de Dados ---
 def carregar_dados(aba):
-    # ttl=0 garante que não pega dados velhos do cache
     try:
+        # ttl=0 garante que não pega dados velhos do cache
         df = conn.read(worksheet=aba, ttl=0)
-        # Se vier vazio ou com problemas, forçamos as colunas certas
         if df.empty:
              return pd.DataFrame()
         return df
@@ -24,12 +23,21 @@ def carregar_dados(aba):
         return pd.DataFrame()
 
 def salvar_registro(aba, novo_dado_df):
-    # 1. Carrega o que já existe
     df_existente = carregar_dados(aba)
-    # 2. Junta o antigo com o novo
     df_atualizado = pd.concat([df_existente, novo_dado_df], ignore_index=True)
-    # 3. Reescreve na planilha
     conn.update(worksheet=aba, data=df_atualizado)
+
+def excluir_registro(aba, indice_para_deletar):
+    """
+    Remove uma linha específica baseada no índice e atualiza a planilha.
+    """
+    df = carregar_dados(aba)
+    # Remove a linha pelo índice (axis=0 significa linha)
+    df_novo = df.drop(indice_para_deletar, axis=0)
+    # Atualiza a planilha
+    conn.update(worksheet=aba, data=df_novo)
+    st.success("Item removido com sucesso!")
+    st.rerun() # Recarrega a página para atualizar a lista
 
 # --- Interface Principal ---
 st.sidebar.header("Filtros")
@@ -40,6 +48,8 @@ aba_entradas, aba_saidas, aba_resumo = st.tabs(["💰 Entradas", "💸 Saídas",
 # ================= ABA 1: ENTRADAS =================
 with aba_entradas:
     st.subheader("Registrar Atendimento")
+    
+    # 1. Formulário de Cadastro
     with st.form("form_entrada", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -59,22 +69,56 @@ with aba_entradas:
                     "Serviço": servico,
                     "Valor": valor_entrada
                 }])
-                # AQUI: Mudado para "Entradas" (Maiúsculo)
                 salvar_registro("Entradas", novo_df)
                 st.success(f"✅ {cliente} registrado com sucesso!")
+                st.rerun() # Recarrega para aparecer na lista abaixo imediatamente
             else:
                 st.warning("Preencha o nome e o valor.")
 
     st.divider()
-    # Visualização rápida
-    if st.checkbox("Ver últimos registros de Entrada"):
-        # AQUI: Mudado para "Entradas" (Maiúsculo)
-        df_entradas = carregar_dados("Entradas")
-        st.dataframe(df_entradas.tail(5))
+    
+    # 2. Lista de Agendamentos do Dia (Com Exclusão)
+    st.markdown(f"### 📋 Atendimentos de: {data_selecionada.strftime('%d/%m/%Y')}")
+    
+    df_entradas = carregar_dados("Entradas")
+    
+    if not df_entradas.empty:
+        # Converter para data para poder filtrar
+        df_entradas["Data_Dt"] = pd.to_datetime(df_entradas["Data"]).dt.date
+        
+        # Filtra apenas o dia selecionado na barra lateral
+        filtro_dia = df_entradas[df_entradas["Data_Dt"] == data_selecionada]
+        
+        if filtro_dia.empty:
+            st.info("Nenhum atendimento registrado nesta data.")
+        else:
+            # Cabeçalho da Lista
+            c1, c2, c3, c4, c5 = st.columns([2, 3, 3, 2, 1])
+            c1.markdown("**Data**")
+            c2.markdown("**Cliente**")
+            c3.markdown("**Serviço**")
+            c4.markdown("**Valor**")
+            c5.markdown("**Ação**")
+            st.markdown("---")
+
+            # Loop para criar as linhas com botão de excluir
+            # Usamos iterrows() para ter acesso ao índice original da linha para poder deletar
+            for index, row in filtro_dia.iterrows():
+                c1, c2, c3, c4, c5 = st.columns([2, 3, 3, 2, 1])
+                
+                c1.write(pd.to_datetime(row["Data"]).strftime('%d/%m'))
+                c2.write(row["Cliente"])
+                c3.write(row["Serviço"])
+                c4.write(f"R$ {float(row['Valor']):.2f}")
+                
+                # Botão de Excluir (A chave 'key' precisa ser única para cada botão)
+                if c5.button("🗑️", key=f"btn_del_ent_{index}", help="Excluir este registro"):
+                    excluir_registro("Entradas", index)
 
 # ================= ABA 2: SAÍDAS =================
 with aba_saidas:
     st.subheader("Registrar Despesa")
+    
     with st.form("form_saida", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -92,21 +136,51 @@ with aba_saidas:
                     "Descrição": descricao,
                     "Valor": valor_saida
                 }])
-                # AQUI: Mudado para "Saidas" (Maiúsculo e sem acento, conforme planilha)
                 salvar_registro("Saidas", novo_df)
                 st.success(f"✅ Gasto com '{descricao}' registrado!")
+                st.rerun()
             else:
                 st.warning("Preencha a descrição e o valor.")
+    
+    st.divider()
+
+    # 2. Lista de Saídas do Dia (Com Exclusão)
+    st.markdown(f"### 📉 Despesas de: {data_selecionada.strftime('%d/%m/%Y')}")
+    
+    df_saidas = carregar_dados("Saidas")
+    
+    if not df_saidas.empty:
+        df_saidas["Data_Dt"] = pd.to_datetime(df_saidas["Data"]).dt.date
+        filtro_dia_saida = df_saidas[df_saidas["Data_Dt"] == data_selecionada]
+        
+        if filtro_dia_saida.empty:
+            st.info("Nenhuma despesa registrada nesta data.")
+        else:
+            c1, c2, c3, c4 = st.columns([2, 4, 2, 1])
+            c1.markdown("**Data**")
+            c2.markdown("**Descrição**")
+            c3.markdown("**Valor**")
+            c4.markdown("**Ação**")
+            st.markdown("---")
+
+            for index, row in filtro_dia_saida.iterrows():
+                c1, c2, c3, c4 = st.columns([2, 4, 2, 1])
+                
+                c1.write(pd.to_datetime(row["Data"]).strftime('%d/%m'))
+                c2.write(row["Descrição"])
+                c3.write(f"R$ {float(row['Valor']):.2f}")
+                
+                if c4.button("🗑️", key=f"btn_del_sai_{index}"):
+                    excluir_registro("Saidas", index)
 
 # ================= ABA 3: RESUMO =================
 with aba_resumo:
     st.subheader("Balanço Financeiro")
     
-    # Carregar dados atualizados usando os nomes com Maiúscula
+    # Recarrega dados para garantir cálculo correto após exclusões
     df_e = carregar_dados("Entradas")
     df_s = carregar_dados("Saidas")
     
-    # Tratamento de erro caso a planilha esteja vazia
     if not df_e.empty:
         df_e["Data"] = pd.to_datetime(df_e["Data"]).dt.date
         df_e["Valor"] = pd.to_numeric(df_e["Valor"])
@@ -118,7 +192,6 @@ with aba_resumo:
     # --- CÁLCULOS DO DIA ---
     st.markdown(f"### 📅 Resultado do Dia: {data_selecionada.strftime('%d/%m/%Y')}")
     
-    # Filtros do dia
     soma_entrada_dia = 0.0
     soma_saida_dia = 0.0
     
