@@ -13,7 +13,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # --- Funções de Dados ---
 def carregar_dados(aba):
     try:
-        # ttl=0 garante que não pega dados velhos do cache
         df = conn.read(worksheet=aba, ttl=0)
         if df.empty:
              return pd.DataFrame()
@@ -27,19 +26,13 @@ def salvar_registro(aba, novo_dado_df):
     conn.update(worksheet=aba, data=df_atualizado)
 
 def excluir_registro(aba, indice_para_deletar):
-    """
-    Remove uma linha específica baseada no índice e atualiza a planilha.
-    """
     df = carregar_dados(aba)
-    # Remove a linha pelo índice
     df_novo = df.drop(indice_para_deletar, axis=0)
-    # Atualiza a planilha
     conn.update(worksheet=aba, data=df_novo)
     st.success("Item removido com sucesso!")
     st.rerun()
 
-# --- Definição da Data Atual (Automática) ---
-# Como tiramos o sidebar, usamos a data de hoje do sistema
+# --- Definição da Data Atual ---
 data_hoje = date.today()
 
 # --- Interface Principal ---
@@ -49,21 +42,21 @@ aba_entradas, aba_saidas, aba_resumo = st.tabs(["💰 Entradas", "💸 Saídas",
 with aba_entradas:
     st.subheader("Registrar Atendimento")
     
-    # 1. Formulário
     with st.form("form_entrada", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            # Data padrão é hoje, mas permite mudar se for registrar algo antigo
             data_reg = st.date_input("Data", data_hoje)
             cliente = st.text_input("Cliente")
         with col2:
             servico = st.text_input("Serviço")
-            valor_entrada = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+            # AQUI: value=None deixa o campo vazio
+            valor_entrada = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
             
         bt_salvar = st.form_submit_button("Salvar Entrada")
         
         if bt_salvar:
-            if cliente and valor_entrada > 0:
+            # Verifica se valor_entrada não é None e se é maior que 0
+            if cliente and valor_entrada and valor_entrada > 0:
                 novo_df = pd.DataFrame([{
                     "Data": str(data_reg),
                     "Cliente": cliente,
@@ -74,19 +67,17 @@ with aba_entradas:
                 st.success(f"✅ {cliente} registrado com sucesso!")
                 st.rerun()
             else:
-                st.warning("Preencha o nome e o valor.")
+                st.warning("Preencha o nome e o valor corretamente.")
 
     st.divider()
     
-    # 2. Lista de Agendamentos de HOJE
+    # Lista de Hoje
     st.markdown(f"### 📋 Atendimentos do Dia: {data_hoje.strftime('%d/%m/%Y')}")
     
     df_entradas = carregar_dados("Entradas")
     
     if not df_entradas.empty:
         df_entradas["Data_Dt"] = pd.to_datetime(df_entradas["Data"]).dt.date
-        
-        # Filtra apenas o que tem a data de HOJE
         filtro_dia = df_entradas[df_entradas["Data_Dt"] == data_hoje]
         
         if filtro_dia.empty:
@@ -107,7 +98,6 @@ with aba_entradas:
                 c3.write(row["Serviço"])
                 c4.write(f"R$ {float(row['Valor']):.2f}")
                 
-                # Botão de Excluir
                 if c5.button("🗑️", key=f"btn_del_ent_{index}"):
                     excluir_registro("Entradas", index)
 
@@ -121,12 +111,14 @@ with aba_saidas:
             data_gasto = st.date_input("Data", data_hoje)
             descricao = st.text_input("Descrição")
         with col2:
-            valor_saida = st.number_input("Valor (R$)", min_value=0.0, format="%.2f")
+            # AQUI: value=None deixa o campo vazio
+            valor_saida = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
             
         bt_salvar_saida = st.form_submit_button("Salvar Saída")
         
         if bt_salvar_saida:
-            if descricao and valor_saida > 0:
+            # Verifica se valor_saida não é None e se é maior que 0
+            if descricao and valor_saida and valor_saida > 0:
                 novo_df = pd.DataFrame([{
                     "Data": str(data_gasto),
                     "Descrição": descricao,
@@ -140,7 +132,7 @@ with aba_saidas:
     
     st.divider()
 
-    # 2. Lista de Saídas de HOJE
+    # Lista de Hoje
     st.markdown(f"### 📉 Despesas do Dia: {data_hoje.strftime('%d/%m/%Y')}")
     
     df_saidas = carregar_dados("Saidas")
@@ -183,7 +175,7 @@ with aba_resumo:
         df_s["Data"] = pd.to_datetime(df_s["Data"]).dt.date
         df_s["Valor"] = pd.to_numeric(df_s["Valor"])
 
-    # --- CÁLCULOS DO DIA (HOJE) ---
+    # --- Cálculos do Dia ---
     st.markdown(f"### 📅 Resultado de Hoje: {data_hoje.strftime('%d/%m/%Y')}")
     
     soma_entrada_dia = 0.0
@@ -204,7 +196,7 @@ with aba_resumo:
     
     st.divider()
 
-    # --- CÁLCULOS DO MÊS ATUAL ---
+    # --- Cálculos do Mês ---
     mes_atual = data_hoje.month
     ano_atual = data_hoje.year
     
