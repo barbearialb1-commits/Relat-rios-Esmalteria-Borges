@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time # Importante para dar tempo ao cookie ser salvo
 from datetime import date, timedelta
 from streamlit_gsheets import GSheetsConnection
 import extra_streamlit_components as stx
@@ -8,39 +9,45 @@ import extra_streamlit_components as stx
 # --- Configuração da Página ---
 st.set_page_config(page_title="Esmalteria Borges", layout="centered")
 
-# ================= SISTEMA DE LOGIN COM COOKIE (7 DIAS) =================
-# Título principal (aparece antes do login para ficar bonito)
+# ================= SISTEMA DE LOGIN ROBUSTO =================
 st.title("💅 Esmalteria Borges")
 
-# --- CORREÇÃO AQUI: Removemos o @st.cache_resource e a função get_manager ---
-# Chamamos o gerenciador diretamente para evitar o erro de CacheWidgetWarning
-cookie_manager = stx.CookieManager()
+# 1. Carrega o gerenciador de cookies com uma chave única para não bugar
+cookie_manager = stx.CookieManager(key="gerente_cookies")
 
-# Tenta ler o cookie chamado 'acesso_esmalteria'
-# Adicionamos um pequeno atraso (key) para garantir que ele lê corretamente
+# 2. Tenta ler o cookie
 cookie_acesso = cookie_manager.get(cookie="acesso_esmalteria")
 
-# Verifica: Se NÃO tem cookie válido, pede senha
-if cookie_acesso != "liberado":
-    st.markdown("### 🔒 Área Restrita")
+# 3. Verifica login na sessão (Memória curta)
+if "logado_agora" not in st.session_state:
+    st.session_state["logado_agora"] = False
+
+# LÓGICA DE BLOQUEIO:
+# Só mostra o conteúdo se o Cookie for 'liberado' OU se acabou de logar na sessão
+if cookie_acesso != "liberado" and not st.session_state["logado_agora"]:
     
+    st.markdown("### 🔒 Área Restrita")
     senha_digitada = st.text_input("Digite a senha de acesso:", type="password")
     
     if st.button("Entrar"):
         if senha_digitada == "lb":
-            # Se a senha estiver certa, cria o cookie que vence em 7 dias
+            # A. Marca na sessão que logou (para entrar imediatamente)
+            st.session_state["logado_agora"] = True
+            
+            # B. Manda salvar o Cookie (para durar 7 dias)
             data_vencimento = datetime.datetime.now() + timedelta(days=7)
             cookie_manager.set("acesso_esmalteria", "liberado", expires_at=data_vencimento)
             
-            # Recarrega a página para validar o acesso
+            # C. Feedback visual e PAUSA TÁTICA
+            st.success("Senha correta! Acedendo ao sistema...")
+            time.sleep(1.5) # Dá tempo ao navegador para salvar o cookie
             st.rerun()
         else:
             st.error("Senha incorreta!")
     
-    # Para o código aqui se não estiver logado
-    st.stop()
+    st.stop() # Para tudo se não estiver logado
 
-# ================= FIM DO BLOCO DE LOGIN =================
+# ================= FIM DO LOGIN / INÍCIO DO APP =================
 
 # --- CSS para visual de App ---
 hide_st_style = """
