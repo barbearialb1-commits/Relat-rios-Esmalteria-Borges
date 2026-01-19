@@ -10,7 +10,7 @@ import extra_streamlit_components as stx
 st.set_page_config(page_title="Esmalteria Borges", layout="centered")
 
 # ================= SISTEMA DE LOGIN ROBUSTO =================
-st.title("💅 Esmalteria Borges")
+st.title("Esmalteria Borges")
 
 # 1. Carrega o gerenciador de cookies com uma chave única para não bugar
 cookie_manager = stx.CookieManager(key="gerente_cookies")
