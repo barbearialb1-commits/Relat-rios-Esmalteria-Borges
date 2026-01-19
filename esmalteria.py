@@ -7,6 +7,16 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Esmalteria Borges", layout="centered")
 st.title("💅 Esmalteria Borges - Financeiro")
 
+hide_st_style = """
+    <style>
+    #MainMenu {visibility: hidden;} /* Esconde o menu de 3 riscos (opcional) */
+    footer {visibility: hidden;}    /* Esconde 'Made with Streamlit' */
+    header {visibility: hidden;}    /* Esconde a barra colorida do topo */
+    </style>
+"""
+# Se quiseres manter o menu de configurações (para Reboot), apaga a linha do #MainMenu acima
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 # --- Conexão com Google Sheets ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
