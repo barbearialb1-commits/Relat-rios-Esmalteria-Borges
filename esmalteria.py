@@ -49,13 +49,11 @@ with aba_entradas:
             cliente = st.text_input("Cliente")
         with col2:
             servico = st.text_input("Serviço")
-            # AQUI: value=None deixa o campo vazio
             valor_entrada = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
             
         bt_salvar = st.form_submit_button("Salvar Entrada")
         
         if bt_salvar:
-            # Verifica se valor_entrada não é None e se é maior que 0
             if cliente and valor_entrada and valor_entrada > 0:
                 novo_df = pd.DataFrame([{
                     "Data": str(data_reg),
@@ -111,13 +109,11 @@ with aba_saidas:
             data_gasto = st.date_input("Data", data_hoje)
             descricao = st.text_input("Descrição")
         with col2:
-            # AQUI: value=None deixa o campo vazio
             valor_saida = st.number_input("Valor (R$)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
             
         bt_salvar_saida = st.form_submit_button("Salvar Saída")
         
         if bt_salvar_saida:
-            # Verifica se valor_saida não é None e se é maior que 0
             if descricao and valor_saida and valor_saida > 0:
                 novo_df = pd.DataFrame([{
                     "Data": str(data_gasto),
@@ -196,11 +192,20 @@ with aba_resumo:
     
     st.divider()
 
-    # --- Cálculos do Mês ---
+    # --- Cálculos do Mês (Com Tradução Manual) ---
     mes_atual = data_hoje.month
     ano_atual = data_hoje.year
     
-    st.markdown(f"### 🗓️ Resultado do Mês Atual: {data_hoje.strftime('%B/%Y')}")
+    # Dicionário simples para traduzir o número do mês para Português
+    nomes_meses = {
+        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+        5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+        9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+    }
+    nome_mes_pt = nomes_meses[mes_atual]
+    
+    # Aqui usamos o nome em português que pegamos do dicionário
+    st.markdown(f"### 🗓️ Resultado do Mês Atual: {nome_mes_pt}/{ano_atual}")
 
     soma_entrada_mes = 0.0
     soma_saida_mes = 0.0
