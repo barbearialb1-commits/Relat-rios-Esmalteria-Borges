@@ -20,7 +20,7 @@ cookie_acesso = cookie_manager.get(cookie="acesso_esmalteria")
 
 # 3. Verifica login na sessão (Memória curta)
 if "logado_agora" not in st.session_state:
-    st.session_state["logado_agora"] = False
+  st.session_state["logado_agora"] = False
 
 # LÓGICA DE BLOQUEIO:
 # Só mostra o conteúdo se o Cookie for 'liberado' OU se acabou de logar na sessão
