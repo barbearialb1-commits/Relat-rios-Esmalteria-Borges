@@ -49,56 +49,83 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 # --- Conexão ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- Funções Auxiliares ---
+# --- Funções Auxiliares (CORRIGIDA PARA LER DADOS REAIS) ---
 def carregar_dados(aba):
     try:
+        # Lê os dados da planilha
         df = conn.read(worksheet=aba, ttl=0)
-        if df.empty: return pd.DataFrame()
-        # Garante que a coluna Data seja datetime para evitar erros de filtro
+        
+        # Se vier vazio, retorna DataFrame vazio
+        if df.empty:
+            return pd.DataFrame()
+
+        # 1. Limpeza de Nomes das Colunas (Remove espaços extras: "Cliente " vira "Cliente")
+        df.columns = df.columns.str.strip()
+
+        # 2. Tratamento da DATA
         if "Data" in df.columns:
-            df["Data_Dt"] = pd.to_datetime(df["Data"], errors='coerce').dt.date
+            # Converte para datetime forçando erros a virarem NaT (Not a Time)
+            df["Data"] = pd.to_datetime(df["Data"], errors='coerce')
+            # Cria a coluna auxiliar de data pura (sem horas)
+            df["Data_Dt"] = df["Data"].dt.date
+            # Remove linhas que tenham data inválida (opcional, mas evita erros)
+            df = df.dropna(subset=["Data_Dt"])
+
+        # 3. Tratamento do VALOR (Corrige o problema da vírgula)
+        if "Valor" in df.columns:
+            # Converte tudo para texto primeiro -> Troca vírgula por ponto -> Converte para número
+            df["Valor"] = df["Valor"].astype(str).str.replace(',', '.', regex=False)
+            # Remove símbolos de moeda se existirem (R$)
+            df["Valor"] = df["Valor"].str.replace('R$', '', regex=False)
+            df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+
         return df
-    except:
+    except Exception as e:
+        # Mostra o erro no ecrã para facilitar a depuração (podes remover depois)
+        st.error(f"Erro ao ler dados: {e}")
         return pd.DataFrame()
 
 def salvar_registro(aba, novo_dado_df):
-    df_existente = conn.read(worksheet=aba, ttl=0)
-    # Se estiver vazio, cria o DF, senão concatena
-    if df_existente.empty:
-        df_atualizado = novo_dado_df
-    else:
-        df_atualizado = pd.concat([df_existente, novo_dado_df], ignore_index=True)
-    conn.update(worksheet=aba, data=df_atualizado)
+    try:
+        df_existente = conn.read(worksheet=aba, ttl=0)
+        if df_existente.empty:
+            df_atualizado = novo_dado_df
+        else:
+            # Garante que as colunas estejam limpas antes de concatenar
+            df_existente.columns = df_existente.columns.str.strip()
+            df_atualizado = pd.concat([df_existente, novo_dado_df], ignore_index=True)
+        
+        conn.update(worksheet=aba, data=df_atualizado)
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
 
 def excluir_registro(aba, indice_para_deletar):
     df = conn.read(worksheet=aba, ttl=0)
     df_novo = df.drop(indice_para_deletar, axis=0)
     conn.update(worksheet=aba, data=df_novo)
-    st.toast("Item removido!", icon="🗑️") # Toast é mais discreto que success
+    st.toast("Item removido!", icon="🗑️")
     time.sleep(1)
     st.rerun()
 
 # --- Definição da Data Atual ---
 data_hoje = date.today()
 
-# --- Interface Principal (Novas Abas) ---
+# --- Interface Principal ---
 st.markdown("### 💅 Painel de Gestão")
-# Adicionei a aba "Resultado Diário"
 aba_entradas, aba_saidas, aba_diario, aba_resumo = st.tabs(["💰 Entradas", "💸 Saídas", "📅 Resultado Diário", "📊 Balanço Mensal"])
 
 # ================= ABA 1: ENTRADAS =================
 with aba_entradas:
     st.header("Agendamentos e Receitas")
     
-    # 1. SELETOR DE DATA (Fora do formulário para filtrar a visualização)
-    # Isso permite ver o que já tem no dia antes de cadastrar
+    # SELETOR DE DATA
     col_data_e, col_vazia = st.columns([1, 2])
     with col_data_e:
-        data_selecionada_ent = st.date_input("Selecione a Data de Trabalho:", data_hoje, key="dt_entradas")
+        data_selecionada_ent = st.date_input("Data de Trabalho:", data_hoje, key="dt_entradas")
 
     st.divider()
 
-    # 2. VISUALIZAÇÃO DO DIA SELECIONADO (Mostra antes do form)
+    # VISUALIZAÇÃO
     st.markdown(f"**Agenda de: {data_selecionada_ent.strftime('%d/%m/%Y')}**")
     
     df_entradas = carregar_dados("Entradas")
@@ -109,25 +136,26 @@ with aba_entradas:
         if filtro_dia.empty:
             st.info("Nenhum atendimento registrado nesta data.")
         else:
-            # Cabeçalho da tabela
             c1, c2, c3, c4, c5 = st.columns([2, 3, 3, 2, 1])
             c2.markdown("**Cliente**"); c3.markdown("**Serviço**"); c4.markdown("**Valor**")
             
             for index, row in filtro_dia.iterrows():
                 c1, c2, c3, c4, c5 = st.columns([2, 3, 3, 2, 1])
-                c1.write(pd.to_datetime(row["Data"]).strftime('%H:%M') if 'Hora' in row else "---") # Opcional se tiver hora
+                # Exibe a hora se existir, senão mostra traço
+                hora_formatada = row["Data"].strftime('%H:%M') if pd.notnull(row["Data"]) else "---"
+                c1.write(hora_formatada)
                 c2.write(row["Cliente"])
                 c3.write(row["Serviço"])
                 c4.write(f"R$ {float(row['Valor']):.2f}")
                 if c5.button("🗑️", key=f"del_e_{index}"):
                     excluir_registro("Entradas", index)
     else:
-        st.info("Banco de dados vazio.")
+        st.info("A aguardar dados...")
 
     st.markdown("---")
     st.subheader("Novo Registro")
 
-    # 3. FORMULÁRIO (Usa a data selecionada acima)
+    # FORMULÁRIO
     with st.form("form_entrada", clear_on_submit=True):
         st.write(f"Cadastrando para: **{data_selecionada_ent.strftime('%d/%m/%Y')}**")
         
@@ -146,7 +174,7 @@ with aba_entradas:
                     "Data": str(data_selecionada_ent),
                     "Cliente": cliente,
                     "Serviço": servico,
-                    "Valor": valor_entrada
+                    "Valor": valor_entrada # Salva como float/número direto
                 }])
                 salvar_registro("Entradas", novo_df)
                 st.success(f"✅ {cliente} registrado com sucesso!")
@@ -159,14 +187,12 @@ with aba_entradas:
 with aba_saidas:
     st.header("Despesas")
     
-    # 1. Seletor de Data
     col_data_s, col_vazia_s = st.columns([1, 2])
     with col_data_s:
         data_selecionada_saida = st.date_input("Data da Despesa:", data_hoje, key="dt_saidas")
 
     st.divider()
     
-    # 2. Visualização
     st.markdown(f"**Saídas de: {data_selecionada_saida.strftime('%d/%m/%Y')}**")
     df_saidas = carregar_dados("Saidas")
     
@@ -185,7 +211,6 @@ with aba_saidas:
     
     st.markdown("---")
     
-    # 3. Formulário
     with st.form("form_saida", clear_on_submit=True):
         st.write(f"Registrando saída em: **{data_selecionada_saida.strftime('%d/%m/%Y')}**")
         col1, col2 = st.columns(2)
@@ -210,11 +235,10 @@ with aba_saidas:
             else:
                 st.warning("Preencha a descrição e o valor.")
 
-# ================= ABA 3: RESULTADO DIÁRIO (NOVA) =================
+# ================= ABA 3: RESULTADO DIÁRIO =================
 with aba_diario:
     st.subheader("🔍 Filtro de Resultado Diário")
     
-    # Seleção da Data para Análise
     col_d, _ = st.columns([1, 2])
     with col_d:
         data_analise = st.date_input("Qual dia deseja analisar?", data_hoje, key="dt_analise")
@@ -222,29 +246,23 @@ with aba_diario:
     st.markdown("---")
     st.markdown(f"### 📅 Resultado de: {data_analise.strftime('%d/%m/%Y')}")
 
-    # Carrega dados
     df_e = carregar_dados("Entradas")
     df_s = carregar_dados("Saidas")
 
-    # Filtra Entradas do dia
     total_entradas_dia = 0.0
+    entradas_dia = pd.DataFrame()
     if not df_e.empty and "Data_Dt" in df_e.columns:
         entradas_dia = df_e[df_e["Data_Dt"] == data_analise]
         total_entradas_dia = entradas_dia["Valor"].sum()
-    else:
-        entradas_dia = pd.DataFrame()
 
-    # Filtra Saídas do dia
     total_saidas_dia = 0.0
+    saidas_dia = pd.DataFrame()
     if not df_s.empty and "Data_Dt" in df_s.columns:
         saidas_dia = df_s[df_s["Data_Dt"] == data_analise]
         total_saidas_dia = saidas_dia["Valor"].sum()
-    else:
-        saidas_dia = pd.DataFrame()
 
     lucro_dia = total_entradas_dia - total_saidas_dia
 
-    # Exibe Métricas
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Entrada", f"R$ {total_entradas_dia:.2f}")
     col2.metric("Total Saída", f"R$ {total_saidas_dia:.2f}")
@@ -252,7 +270,6 @@ with aba_diario:
 
     st.markdown("---")
     
-    # Detalhamento Visual
     c_det1, c_det2 = st.columns(2)
     
     with c_det1:
@@ -273,7 +290,6 @@ with aba_diario:
 with aba_resumo:
     st.subheader("📊 Balanço Mensal")
     
-    # Usa os DFs já carregados na aba anterior ou recarrega
     df_e = carregar_dados("Entradas")
     df_s = carregar_dados("Saidas")
     
